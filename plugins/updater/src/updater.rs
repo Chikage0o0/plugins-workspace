@@ -314,10 +314,14 @@ impl Updater {
 
         let client = request.build()?;
 
-        self.check_with_custom_client(client).await
+        self.check_inner(client).await
     }
 
     pub async fn check_with_custom_client(&self, client: Client) -> Result<Option<Update>> {
+        self.check_inner(client).await
+    }
+
+    async fn check_inner(&self, client: Client) -> Result<Option<Update>> {
         // we want JSON only
         let mut headers = self.headers.clone();
         headers.insert("Accept", HeaderValue::from_str("application/json").unwrap());
@@ -471,16 +475,9 @@ impl Update {
     /// Use [`Update::install`] to install it
     pub async fn download<C: FnMut(usize, Option<u64>), D: FnOnce()>(
         &self,
-        mut on_chunk: C,
+        on_chunk: C,
         on_download_finish: D,
     ) -> Result<Vec<u8>> {
-        // set our headers
-        let mut headers = self.headers.clone();
-        headers.insert(
-            "Accept",
-            HeaderValue::from_str("application/octet-stream").unwrap(),
-        );
-
         let mut request = ClientBuilder::new().user_agent(UPDATER_USER_AGENT);
         if let Some(timeout) = self.timeout {
             request = request.timeout(timeout);
@@ -489,8 +486,35 @@ impl Update {
             let proxy = reqwest::Proxy::all(proxy.as_str())?;
             request = request.proxy(proxy);
         }
-        let response = request
-            .build()?
+        let client = request.build()?;
+        self.download_inner(on_chunk, on_download_finish, client)
+            .await
+    }
+
+    pub async fn download_with_custom_client<C: FnMut(usize, Option<u64>), D: FnOnce()>(
+        &self,
+        mut on_chunk: C,
+        on_download_finish: D,
+        client: Client,
+    ) -> Result<Vec<u8>> {
+        self.download_inner(&mut on_chunk, on_download_finish, client)
+            .await
+    }
+
+    async fn download_inner<C: FnMut(usize, Option<u64>), D: FnOnce()>(
+        &self,
+        mut on_chunk: C,
+        on_download_finish: D,
+        client: Client,
+    ) -> Result<Vec<u8>> {
+        // set our headers
+        let mut headers = self.headers.clone();
+        headers.insert(
+            "Accept",
+            HeaderValue::from_str("application/octet-stream").unwrap(),
+        );
+
+        let response = client
             .get(self.download_url.clone())
             .headers(headers)
             .send()
