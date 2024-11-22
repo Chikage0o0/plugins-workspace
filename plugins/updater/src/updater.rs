@@ -19,7 +19,7 @@ use minisign_verify::{PublicKey, Signature};
 use percent_encoding::{AsciiSet, CONTROLS};
 use reqwest::{
     header::{HeaderMap, HeaderValue},
-    ClientBuilder, StatusCode,
+    Client, ClientBuilder, StatusCode,
 };
 use semver::Version;
 use serde::{de::Error as DeError, Deserialize, Deserializer, Serialize};
@@ -303,6 +303,21 @@ pub struct Updater {
 
 impl Updater {
     pub async fn check(&self) -> Result<Option<Update>> {
+        let mut request = ClientBuilder::new().user_agent(UPDATER_USER_AGENT);
+        if let Some(timeout) = self.timeout {
+            request = request.timeout(timeout);
+        }
+        if let Some(ref proxy) = self.proxy {
+            let proxy = reqwest::Proxy::all(proxy.as_str())?;
+            request = request.proxy(proxy);
+        }
+
+        let client = request.build()?;
+
+        self.check_with_custom_client(client).await
+    }
+
+    pub async fn check_with_custom_client(&self, client: Client) -> Result<Option<Update>> {
         // we want JSON only
         let mut headers = self.headers.clone();
         headers.insert("Accept", HeaderValue::from_str("application/json").unwrap());
@@ -346,20 +361,7 @@ impl Updater {
                 .replace("{{arch}}", self.arch)
                 .parse()?;
 
-            let mut request = ClientBuilder::new().user_agent(UPDATER_USER_AGENT);
-            if let Some(timeout) = self.timeout {
-                request = request.timeout(timeout);
-            }
-            if let Some(ref proxy) = self.proxy {
-                let proxy = reqwest::Proxy::all(proxy.as_str())?;
-                request = request.proxy(proxy);
-            }
-            let response = request
-                .build()?
-                .get(url)
-                .headers(headers.clone())
-                .send()
-                .await;
+            let response = client.get(url).headers(headers.clone()).send().await;
 
             if let Ok(res) = response {
                 if res.status().is_success() {
