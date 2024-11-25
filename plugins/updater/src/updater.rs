@@ -314,14 +314,14 @@ impl Updater {
 
         let client = request.build()?;
 
+        self.check_inner(&client).await
+    }
+
+    pub async fn check_with_custom_client(&self, client: &Client) -> Result<Option<Update>> {
         self.check_inner(client).await
     }
 
-    pub async fn check_with_custom_client(&self, client: Client) -> Result<Option<Update>> {
-        self.check_inner(client).await
-    }
-
-    async fn check_inner(&self, client: Client) -> Result<Option<Update>> {
+    async fn check_inner(&self, client: &Client) -> Result<Option<Update>> {
         // we want JSON only
         let mut headers = self.headers.clone();
         headers.insert("Accept", HeaderValue::from_str("application/json").unwrap());
@@ -487,7 +487,7 @@ impl Update {
             request = request.proxy(proxy);
         }
         let client = request.build()?;
-        self.download_inner(on_chunk, on_download_finish, client)
+        self.download_inner(on_chunk, on_download_finish, &client)
             .await
     }
 
@@ -495,7 +495,7 @@ impl Update {
         &self,
         mut on_chunk: C,
         on_download_finish: D,
-        client: Client,
+        client: &Client,
     ) -> Result<Vec<u8>> {
         self.download_inner(&mut on_chunk, on_download_finish, client)
             .await
@@ -505,7 +505,7 @@ impl Update {
         &self,
         mut on_chunk: C,
         on_download_finish: D,
-        client: Client,
+        client: &Client,
     ) -> Result<Vec<u8>> {
         // set our headers
         let mut headers = self.headers.clone();
