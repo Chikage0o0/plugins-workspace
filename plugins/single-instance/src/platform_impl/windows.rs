@@ -68,9 +68,12 @@ pub fn init<R: Runtime>(f: Box<SingleInstanceCallback<R>>) -> TauriPlugin<R> {
                             cbData: bytes.len() as _,
                             lpData: bytes.as_ptr() as _,
                         };
-                        SendMessageW(hwnd, WM_COPYDATA, 0, &cds as *const _ as _);
-                        app.cleanup_before_exit();
-                        std::process::exit(0);
+                        let contains_restart = data.split('|').any(|part| part.trim() == "--release\0");
+                        if !contains_restart {
+                            SendMessageW(hwnd, WM_COPYDATA, 0, &cds as *const _ as _);
+                            app.cleanup_before_exit();
+                            std::process::exit(0);
+                        }
                     }
                 }
             } else {
